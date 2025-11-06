@@ -5,43 +5,214 @@ spring:
     gateway:
       discovery:
         locator:
-          enabled: true
-          lower-case-service-id: true
+          enabled: false
       routes:
+        # ============================================
+        # 👤 USER MANAGEMENT
+        # ============================================
         - id: user-management
-          uri: lb://user-management
+          uri: http://localhost:8083
           predicates:
             - Path=/api/auth/**
           filters:
             - AddRequestHeader=X-Request-Foo, Bar
+            # ⚡ CIRCUIT BREAKER AJOUTÉ
+            - name: CircuitBreaker
+              args:
+                name: userManagementCircuitBreaker
+                fallbackUri: forward:/fallback/user-management
 
+        # ============================================
+        # 🎬 MOVIE SERVICE
+        # ============================================
         - id: movie-service
-          uri: lb://movie-service
+          uri: http://localhost:7080
           predicates:
             - Path=/movies/v1/**
+          filters:
+            # ⚡ CIRCUIT BREAKER AJOUTÉ
+            - name: CircuitBreaker
+              args:
+                name: movieServiceCircuitBreaker
+                fallbackUri: forward:/fallback/movie-service
 
+        # ============================================
+        # 🎫 BOOKING SERVICE
+        # ============================================
         - id: booking-service
-          uri: lb://booking-service
+          uri: http://localhost:7000
           predicates:
             - Path=/reservations/v1/**
+          filters:
+            # ⚡ CIRCUIT BREAKER AJOUTÉ
+            - name: CircuitBreaker
+              args:
+                name: bookingServiceCircuitBreaker
+                fallbackUri: forward:/fallback/booking-service
 
+        # ============================================
+        # 🎭 CINEMA SERVICE
+        # ============================================
         - id: cinema-service
-          uri: lb://cinema-service
+          uri: http://localhost:9090
           predicates:
             - Path=/cinema/v1/**
+          filters:
+            # ⚡ CIRCUIT BREAKER AJOUTÉ
+            - name: CircuitBreaker
+              args:
+                name: cinemaServiceCircuitBreaker
+                fallbackUri: forward:/fallback/cinema-service
 
+# ============================================
+# 🔴 RESILIENCE4J CONFIG
+# ============================================
+resilience4j:
+  circuitbreaker:
+    instances:
+      movieServiceCircuitBreaker:
+        failureRateThreshold: 50
+        slowCallRateThreshold: 80
+        slowCallDurationThreshold: 2s
+        minimumNumberOfCalls: 5
+        slidingWindowSize: 10
+        slidingWindowType: COUNT_BASED
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+      cinemaServiceCircuitBreaker:
+        failureRateThreshold: 50
+        slowCallRateThreshold: 80
+        slowCallDurationThreshold: 2s
+        minimumNumberOfCalls: 5
+        slidingWindowSize: 10
+        slidingWindowType: COUNT_BASED
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+      bookingServiceCircuitBreaker:
+        failureRateThreshold: 50
+        slowCallRateThreshold: 80
+        slowCallDurationThreshold: 3s
+        minimumNumberOfCalls: 5
+        slidingWindowSize: 10
+        slidingWindowType: COUNT_BASED
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+      userManagementCircuitBreaker:
+        failureRateThreshold: 50
+        slowCallRateThreshold: 80
+        slowCallDurationThreshold: 1s
+        minimumNumberOfCalls: 5
+        slidingWindowSize: 10
+        slidingWindowType: COUNT_BASED
+        waitDurationInOpenState: 20s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+  timelimiter:
+    instances:
+      movieServiceCircuitBreaker:
+        timeoutDuration: 3s
+        cancelRunningFuture: true
+      cinemaServiceCircuitBreaker:
+        timeoutDuration: 3s
+        cancelRunningFuture: true
+      bookingServiceCircuitBreaker:
+        timeoutDuration: 5s
+        cancelRunningFuture: true
+      userManagementCircuitBreaker:
+        timeoutDuration: 2s
+        cancelRunningFuture: true
+
+# JWT Config
 app:
   jwt:
     secret: LnX1yH3pYq6gTbWxV2zQ8uRfNjKrI0VxTk6b2o4D4q9w2U5QjX
     expirationMs: 3600000
 
+# Actuator
 management:
   endpoints:
     web:
       exposure:
         include: "*"
+  endpoint:
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true
 
+# Eureka
 eureka:
   client:
+    enabled: true
     service-url:
       defaultZone: http://localhost:8761/eureka
+    register-with-eureka: true
+    fetch-registry: false
+
+# Logging
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    io.github.resilience4j: DEBUG
+    com.spring.gateway: DEBUG
+    root: INFO
+
+
+
+
+
+#spring:
+#  main:
+#    web-application-type: reactive
+#  cloud:
+#    gateway:
+#      discovery:
+#        locator:
+#          enabled: true
+#          lower-case-service-id: true
+#      routes:
+#        - id: user-management
+#          uri: lb://user-management
+#          predicates:
+#            - Path=/api/auth/**
+#          filters:
+#            - AddRequestHeader=X-Request-Foo, Bar
+#
+#        - id: movie-service
+#          uri: lb://movie-service
+#          predicates:
+#            - Path=/movies/v1/**
+#
+#        - id: booking-service
+#          uri: lb://booking-service
+#          predicates:
+#            - Path=/reservations/v1/**
+#
+#        - id: cinema-service
+#          uri: lb://cinema-service
+#          predicates:
+#            - Path=/cinema/v1/**
+#
+#app:
+#  jwt:
+#    secret: LnX1yH3pYq6gTbWxV2zQ8uRfNjKrI0VxTk6b2o4D4q9w2U5QjX
+#    expirationMs: 3600000
+#
+#management:
+#  endpoints:
+#    web:
+#      exposure:
+#        include: "*"
+#
+#eureka:
+#  client:
+#    service-url:
+#      defaultZone: http://localhost:8761/eureka
